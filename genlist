@@ -1,0 +1,3 @@
+#!/bin/sh
+
+find wpt/css/CSS2/ -type f | grep -E '\.(html|xht)$' | grep -v -- '-ref.'

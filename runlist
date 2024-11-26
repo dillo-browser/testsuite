@@ -1,0 +1,27 @@
+#!/bin/sh
+
+if [ ! -e $DILLOBIN ]; then
+  echo missing dillo binary, set DILLOBIN with the path to dillo
+  exit 1
+fi
+
+ntot=0
+nok=0
+
+while read testfile; do
+  let ntot="$ntot+1"
+  #./single.sh "$testfile"
+  ./runtest "$testfile" >/dev/null 2>&1
+  ret=$?
+  if [ "$ret" == "0" ]; then
+    echo "OK   $testfile"
+    let nok="$nok+1"
+  elif [ "$ret" == "100" ]; then 
+    echo "FAIL $testfile"
+  else
+    echo "BAD  $testfile"
+  fi
+done
+
+echo
+echo "Passed tests: $nok/$ntot"

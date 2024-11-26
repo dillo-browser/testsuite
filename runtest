@@ -1,0 +1,89 @@
+#!/bin/sh
+
+# Return errors:
+#
+# 0   - The test passed
+# 1   - Cannot find Dillo binary
+# 2   - Cannot find test or reference test
+# 3   - Dillo crashed or cannot find window
+# 100 - The test doesn't match the reference
+
+set -e
+#set -x
+
+if [ ! -e "$DILLOBIN" ]; then
+  echo missing dillo binary, set DILLOBIN with the path to dillo
+  exit 1
+fi
+
+test_fpath="$1"
+
+# Set the testfile to absolute path
+testfile="$PWD/$test_fpath"
+
+if [ ! -e "$testfile" ]; then
+  echo "cannot find test file: $testfile" >&2
+  exit 2
+fi
+
+testdir=$(dirname "$testfile")
+
+# Get the match file
+match=$(xmllint --html --xpath "string(//head/link[@rel='match']/@href)" "$testfile")
+
+if [ -z "$match" ]; then
+  echo "cannot find link rel=match file" >&2
+  exit 2
+fi
+
+reffile="$testdir/$match"
+
+if [ ! -e "$reffile" ]; then
+  echo "reference file $reffile not found" >&2
+  exit 2
+fi
+
+magick_bin="convert"
+if command -v magick 2>&1 >/dev/null; then
+  magick_bin="magick"
+fi
+
+function render_page() {
+  htmlfile="$1"
+  outpic="$2"
+
+  "$DILLOBIN" -f "$htmlfile" &
+  dillopid=$!
+
+  # TODO: We need a better system to determine when the page loaded
+  sleep 0.5
+
+  # Capture only Dillo window
+  winid=$(xwininfo -all -root | awk '/Dillo:/ {print $1}')
+  if [ -z "$winid" ]; then
+    echo "cannot find Dillo window" >&2
+    exit 3
+  fi
+  xwd -id "$winid" -silent | ${magick_bin} xwd:- png:${outpic}
+
+  kill "$dillopid"
+}
+
+mkdir -p out
+
+render_page "$testfile" "out/test.png"
+render_page "$reffile" "out/ref.png"
+
+# AE = Absolute Error count of the number of different pixels
+diffcount=$(compare -metric AE "out/test.png" "out/ref.png" "out/diff.png" 2>&1 || true)
+
+# The test passes only if both images are identical
+if [ "$diffcount" = "0" ]; then
+  #echo "OK   $testfile"
+  ret=0
+else
+  #echo "FAIL $testfile"
+  ret=100
+fi
+
+exit $ret
